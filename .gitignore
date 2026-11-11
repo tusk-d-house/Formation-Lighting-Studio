@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Build outputs & release packages
+dist/
+dist-ssr/
+release/
+*.tsbuildinfo
+.vite/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# OS & Editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+*.local
+.idea/
+.vscode/*
+!.vscode/extensions.json
