@@ -1,14 +1,17 @@
 # Dependencies
 node_modules/
+**/node_modules/
 
-# Build outputs & release packages
-dist/
-dist-ssr/
-release/
+# Unpacked Electron binary (auto-extracted from runtime/engine.p1 & engine.p2 on first run)
+/runtime/FormationStudio.exe
+*.tmp
+
+# Optional local release archives
+/release/
+
+# Build caches & logs
 *.tsbuildinfo
 .vite/
-
-# Logs
 logs
 *.log
 npm-debug.log*
