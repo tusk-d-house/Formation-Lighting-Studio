@@ -1,13 +1,11 @@
 {
   "name": "formation-studio",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
   "description": "Dance & Performance Formation and Stage Lighting Studio",
   "main": "electron/main.cjs",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "preview": "vite preview",
+    "build": "tsc --noEmit && vite build",
     "electron:dev": "concurrently -k \"vite --port 5173\" \"wait-on http://localhost:5173 && electron .\"",
     "electron:start": "electron ."
   },
