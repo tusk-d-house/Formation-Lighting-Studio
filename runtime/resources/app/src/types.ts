@@ -2,6 +2,19 @@ export type WorkflowStep = 'formations' | 'lighting' | 'timeline' | 'settings';
 
 export type StageTheme = 'hall' | 'clubhouse';
 
+export type GraphicsPreset = 'high' | 'medium' | 'low' | 'custom';
+export type BeamQuality = 'high' | 'simple' | 'off';
+
+export interface GraphicsSettings {
+  preset: GraphicsPreset;
+  dpr: number;
+  antialias: boolean;
+  spotLights: boolean;
+  shadows: boolean;
+  beamQuality: BeamQuality;
+  floorProjection: boolean;
+}
+
 export type LightGroupId =
   | 'pinspot'
   | 'front_sus'

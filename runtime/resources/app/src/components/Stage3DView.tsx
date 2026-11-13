@@ -2,15 +2,20 @@ import React, { useMemo, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Grid, Html, Line } from '@react-three/drei';
 import * as THREE from 'three';
+import { SlidersHorizontal } from 'lucide-react';
 import { useFormationStore, GRID_UNIT_M } from '../store/useFormationStore';
 import { InterpolatedStageState } from '../utils/interpolation';
-import { LightFixture, LightConfig, GoboPattern } from '../types';
+import { LightFixture, LightConfig, GoboPattern, BeamQuality, GraphicsPreset } from '../types';
 import { getGoboBeamTexture, getGoboFloorTexture } from '../utils/lightTextures';
 
 interface SpotlightRigProps {
   fixture: LightFixture;
   state: LightConfig;
   showBeam: boolean;
+  enableSpotLight: boolean;
+  enableShadows: boolean;
+  beamQuality: BeamQuality;
+  enableFloorProjection: boolean;
   isSelected: boolean;
   onSelect: () => void;
 }
@@ -19,6 +24,10 @@ const SpotlightRig: React.FC<SpotlightRigProps> = ({
   fixture,
   state,
   showBeam,
+  enableSpotLight,
+  enableShadows,
+  beamQuality,
+  enableFloorProjection,
   isSelected,
   onSelect,
 }) => {
@@ -95,7 +104,7 @@ const SpotlightRig: React.FC<SpotlightRigProps> = ({
         />
       </mesh>
 
-      {state.enabled && (
+      {state.enabled && enableSpotLight && (
         <spotLight
           position={fixture.mountPosition}
           target={targetObject}
@@ -105,16 +114,25 @@ const SpotlightRig: React.FC<SpotlightRigProps> = ({
           penumbra={hasGobo ? 0.25 : isPin ? 0.35 : 0.85}
           distance={22}
           decay={1.5}
-          castShadow={isPin}
+          castShadow={enableShadows && isPin}
         />
       )}
 
       {/* Realistic Volumetric Beam: fades out completely toward floor end with no harsh cutoff edges */}
-      {showBeam && effectiveIntensity > 0.04 && (
+      {showBeam && beamQuality !== 'off' && effectiveIntensity > 0.04 && (
         <group position={midPoint} quaternion={quaternion}>
           {/* Main volumetric cone (with Gobo ray streaks when Gobo is active) */}
           <mesh renderOrder={2}>
-            <cylinderGeometry args={[0.08 * goboBeamScale, coneRadius, distance, hasGobo ? 28 : 16, 1, true]} />
+            <cylinderGeometry
+              args={[
+                0.08 * goboBeamScale,
+                coneRadius,
+                distance,
+                beamQuality === 'simple' ? (hasGobo ? 16 : 10) : hasGobo ? 28 : 16,
+                1,
+                true,
+              ]}
+            />
             <meshBasicMaterial
               color={state.color}
               map={beamTexture}
@@ -129,28 +147,30 @@ const SpotlightRig: React.FC<SpotlightRigProps> = ({
               fog={false}
             />
           </mesh>
-          {/* Subtle luminous core streak */}
-          <mesh renderOrder={3}>
-            <cylinderGeometry args={[0.04 * goboBeamScale, coneRadius * 0.42, distance, 14, 1, true]} />
-            <meshBasicMaterial
-              color="#ffffff"
-              map={beamTexture}
-              transparent
-              opacity={Math.min(
-                0.24,
-                effectiveIntensity * (isPin ? 0.085 : isFoot ? 0.035 : 0.048)
-              )}
-              side={THREE.DoubleSide}
-              depthWrite={false}
-              blending={THREE.AdditiveBlending}
-              fog={false}
-            />
-          </mesh>
+          {/* Subtle luminous core streak (high quality only) */}
+          {beamQuality === 'high' && (
+            <mesh renderOrder={3}>
+              <cylinderGeometry args={[0.04 * goboBeamScale, coneRadius * 0.42, distance, 14, 1, true]} />
+              <meshBasicMaterial
+                color="#ffffff"
+                map={beamTexture}
+                transparent
+                opacity={Math.min(
+                  0.24,
+                  effectiveIntensity * (isPin ? 0.085 : isFoot ? 0.035 : 0.048)
+                )}
+                side={THREE.DoubleSide}
+                depthWrite={false}
+                blending={THREE.AdditiveBlending}
+                fog={false}
+              />
+            </mesh>
+          )}
         </group>
       )}
 
       {/* Floor Spotlight / Gobo Projection Pool */}
-      {canProjectToFloor && effectiveIntensity > 0.04 && (
+      {canProjectToFloor && enableFloorProjection && effectiveIntensity > 0.04 && (
         <group
           position={[floorX, 0.016, floorZ]}
           rotation={[-Math.PI / 2, 0, floorRotY]}
@@ -170,7 +190,7 @@ const SpotlightRig: React.FC<SpotlightRigProps> = ({
               fog={false}
             />
           </mesh>
-          {hasGobo && (
+          {hasGobo && beamQuality === 'high' && (
             <mesh renderOrder={5}>
               <planeGeometry args={[floorRadius * 2.3, floorRadius * 2.3]} />
               <meshBasicMaterial
@@ -211,12 +231,23 @@ export const Stage3DView: React.FC<Stage3DViewProps> = ({ stageState }) => {
     showDancerNames,
     dancerScale,
     isRecordingVideo,
+    graphicsSettings,
+    setGraphicsPreset,
+    updateGraphicsSettings,
     selectPerformer,
     selectLight,
   } = useFormationStore();
 
   const controlsRef = useRef<any>(null);
   const [camPreset, setCamPreset] = useState<'front' | 'angle' | 'top'>('angle');
+  const [showGraphicsMenu, setShowGraphicsMenu] = useState(false);
+
+  const presetLabelMap: Record<GraphicsPreset, string> = {
+    high: '高画質',
+    medium: '標準',
+    low: '軽量',
+    custom: 'カスタム',
+  };
 
   const applyCameraView = (preset: 'front' | 'angle' | 'top') => {
     setCamPreset(preset);
@@ -292,43 +323,220 @@ export const Stage3DView: React.FC<Stage3DViewProps> = ({ stageState }) => {
           )}
         </div>
 
-        <div className="flex items-center gap-1.5 pointer-events-auto bg-slate-900/90 p-1 rounded-lg border border-slate-800">
-          <button
-            onClick={() => applyCameraView('angle')}
-            className={`px-2.5 py-1 rounded text-xs font-medium transition ${
-              camPreset === 'angle'
-                ? 'bg-sky-600 text-white'
-                : 'text-slate-300 hover:bg-slate-800'
-            }`}
-          >
-            斜め俯瞰
-          </button>
-          <button
-            onClick={() => applyCameraView('front')}
-            className={`px-2.5 py-1 rounded text-xs font-medium transition ${
-              camPreset === 'front'
-                ? 'bg-sky-600 text-white'
-                : 'text-slate-300 hover:bg-slate-800'
-            }`}
-          >
-            客席正面
-          </button>
-          <button
-            onClick={() => applyCameraView('top')}
-            className={`px-2.5 py-1 rounded text-xs font-medium transition ${
-              camPreset === 'top'
-                ? 'bg-sky-600 text-white'
-                : 'text-slate-300 hover:bg-slate-800'
-            }`}
-          >
-            真上
-          </button>
+        <div className="flex items-center gap-1.5 pointer-events-auto">
+          <div className="relative">
+            <button
+              onClick={() => setShowGraphicsMenu((v) => !v)}
+              className={`px-2.5 py-1.5 rounded-lg border text-xs font-medium flex items-center gap-1.5 transition ${
+                showGraphicsMenu
+                  ? 'bg-sky-600 text-white border-sky-500'
+                  : 'bg-slate-900/90 text-slate-200 border-slate-800 hover:bg-slate-800'
+              }`}
+              title="3D描画設定（動作が重い場合は「軽量」を選択してください）"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5 text-sky-400" />
+              <span>描画: {presetLabelMap[graphicsSettings.preset]}</span>
+            </button>
+
+            {showGraphicsMenu && (
+              <div className="absolute right-0 mt-1.5 w-72 p-3 rounded-xl bg-slate-900/95 backdrop-blur border border-slate-700 shadow-2xl z-30 text-xs text-slate-200 space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <span className="font-bold text-slate-100">3D描画・パフォーマンス設定</span>
+                  <button
+                    onClick={() => setShowGraphicsMenu(false)}
+                    className="text-slate-400 hover:text-white px-1"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Preset Selector */}
+                <div>
+                  <div className="text-[11px] text-slate-400 mb-1.5">プリセット</div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {(['high', 'medium', 'low'] as const).map((p) => (
+                      <button
+                        key={p}
+                        onClick={() => setGraphicsPreset(p)}
+                        className={`py-1.5 rounded-lg font-bold border transition ${
+                          graphicsSettings.preset === p
+                            ? 'bg-sky-600 text-white border-sky-400'
+                            : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+                        }`}
+                      >
+                        {presetLabelMap[p]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Individual Options */}
+                <div className="space-y-2 pt-1 border-t border-slate-800">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-300">描画解像度</span>
+                    <div className="flex gap-1">
+                      {[
+                        { label: '低', val: 0.75 },
+                        { label: '標準', val: 1.0 },
+                        { label: '高', val: 1.5 },
+                      ].map((opt) => (
+                        <button
+                          key={opt.val}
+                          onClick={() => updateGraphicsSettings({ dpr: opt.val })}
+                          className={`px-2 py-0.5 rounded border text-[11px] font-semibold ${
+                            graphicsSettings.dpr === opt.val
+                              ? 'bg-sky-600 text-white border-sky-400'
+                              : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-slate-300">リアル光源 (SpotLight)</div>
+                      <div className="text-[10px] text-slate-500">OFFにすると大幅に軽くなります</div>
+                    </div>
+                    <button
+                      onClick={() =>
+                        updateGraphicsSettings({ spotLights: !graphicsSettings.spotLights })
+                      }
+                      className={`px-2.5 py-1 rounded font-bold text-[11px] border ${
+                        graphicsSettings.spotLights
+                          ? 'bg-emerald-600/30 text-emerald-300 border-emerald-500/50'
+                          : 'bg-slate-800 text-slate-400 border-slate-700'
+                      }`}
+                    >
+                      {graphicsSettings.spotLights ? 'ON' : 'OFF'}
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-300">リアルタイム影</span>
+                    <button
+                      onClick={() =>
+                        updateGraphicsSettings({ shadows: !graphicsSettings.shadows })
+                      }
+                      className={`px-2.5 py-1 rounded font-bold text-[11px] border ${
+                        graphicsSettings.shadows
+                          ? 'bg-emerald-600/30 text-emerald-300 border-emerald-500/50'
+                          : 'bg-slate-800 text-slate-400 border-slate-700'
+                      }`}
+                    >
+                      {graphicsSettings.shadows ? 'ON' : 'OFF'}
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-300">ビーム光</span>
+                    <div className="flex gap-1">
+                      {(
+                        [
+                          { label: '高精細', val: 'high' },
+                          { label: '軽量', val: 'simple' },
+                          { label: 'OFF', val: 'off' },
+                        ] as const
+                      ).map((opt) => (
+                        <button
+                          key={opt.val}
+                          onClick={() => updateGraphicsSettings({ beamQuality: opt.val })}
+                          className={`px-2 py-0.5 rounded border text-[11px] font-semibold ${
+                            graphicsSettings.beamQuality === opt.val
+                              ? 'bg-sky-600 text-white border-sky-400'
+                              : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-300">床スポット・ゴボ投影</span>
+                    <button
+                      onClick={() =>
+                        updateGraphicsSettings({
+                          floorProjection: !graphicsSettings.floorProjection,
+                        })
+                      }
+                      className={`px-2.5 py-1 rounded font-bold text-[11px] border ${
+                        graphicsSettings.floorProjection
+                          ? 'bg-emerald-600/30 text-emerald-300 border-emerald-500/50'
+                          : 'bg-slate-800 text-slate-400 border-slate-700'
+                      }`}
+                    >
+                      {graphicsSettings.floorProjection ? 'ON' : 'OFF'}
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-300">アンチエイリアス</span>
+                    <button
+                      onClick={() =>
+                        updateGraphicsSettings({ antialias: !graphicsSettings.antialias })
+                      }
+                      className={`px-2.5 py-1 rounded font-bold text-[11px] border ${
+                        graphicsSettings.antialias
+                          ? 'bg-emerald-600/30 text-emerald-300 border-emerald-500/50'
+                          : 'bg-slate-800 text-slate-400 border-slate-700'
+                      }`}
+                    >
+                      {graphicsSettings.antialias ? 'ON' : 'OFF'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1 bg-slate-900/90 p-1 rounded-lg border border-slate-800">
+            <button
+              onClick={() => applyCameraView('angle')}
+              className={`px-2.5 py-1 rounded text-xs font-medium transition ${
+                camPreset === 'angle'
+                  ? 'bg-sky-600 text-white'
+                  : 'text-slate-300 hover:bg-slate-800'
+              }`}
+            >
+              斜め俯瞰
+            </button>
+            <button
+              onClick={() => applyCameraView('front')}
+              className={`px-2.5 py-1 rounded text-xs font-medium transition ${
+                camPreset === 'front'
+                  ? 'bg-sky-600 text-white'
+                  : 'text-slate-300 hover:bg-slate-800'
+              }`}
+            >
+              客席正面
+            </button>
+            <button
+              onClick={() => applyCameraView('top')}
+              className={`px-2.5 py-1 rounded text-xs font-medium transition ${
+                camPreset === 'top'
+                  ? 'bg-sky-600 text-white'
+                  : 'text-slate-300 hover:bg-slate-800'
+              }`}
+            >
+              真上
+            </button>
+          </div>
         </div>
       </div>
 
       <Canvas
-        dpr={[1, 1.5]}
-        gl={{ preserveDrawingBuffer: true, powerPreference: 'high-performance' }}
+        key={`stage-3d-canvas-${graphicsSettings.antialias ? 'aa' : 'noaa'}`}
+        shadows={graphicsSettings.shadows}
+        dpr={graphicsSettings.dpr}
+        gl={{
+          antialias: graphicsSettings.antialias,
+          preserveDrawingBuffer: true,
+          powerPreference: 'high-performance',
+        }}
         camera={{ position: [0, 7.2, 11.2], fov: 45 }}
         onCreated={({ gl }) => {
           gl.domElement.id = 'stage-3d-webgl-canvas';
@@ -346,13 +554,19 @@ export const Stage3DView: React.FC<Stage3DViewProps> = ({ stageState }) => {
 
         <ambientLight
           color={stageState.ambientColor}
-          intensity={Math.max(0.08, stageState.ambientIntensity * 1.4)}
+          intensity={Math.max(
+            graphicsSettings.spotLights ? 0.08 : 0.22,
+            stageState.ambientIntensity * (graphicsSettings.spotLights ? 1.4 : 2.0)
+          )}
         />
         <hemisphereLight
           args={[
             isHall ? '#fffbeb' : stageState.ambientColor,
             isHall ? '#452712' : '#090d16',
-            Math.max(0.18, stageState.ambientIntensity * 0.9),
+            Math.max(
+              graphicsSettings.spotLights ? 0.18 : 0.35,
+              stageState.ambientIntensity * (graphicsSettings.spotLights ? 0.9 : 1.3)
+            ),
           ]}
         />
 
@@ -361,7 +575,10 @@ export const Stage3DView: React.FC<Stage3DViewProps> = ({ stageState }) => {
           position={[0, 10, stageDepth / 2 + 8]}
           target-position={[0, 0, 0]}
           color={stageState.ambientColor}
-          intensity={Math.max(0.1, stageState.ambientIntensity * 2.6)}
+          intensity={Math.max(
+            graphicsSettings.spotLights ? 0.1 : 0.25,
+            stageState.ambientIntensity * (graphicsSettings.spotLights ? 2.6 : 3.2)
+          )}
         />
 
         {/* Overhead Truss & Stage Architecture */}
@@ -544,6 +761,10 @@ export const Stage3DView: React.FC<Stage3DViewProps> = ({ stageState }) => {
               fixture={fixture}
               state={lState}
               showBeam={showLightBeams}
+              enableSpotLight={graphicsSettings.spotLights}
+              enableShadows={graphicsSettings.shadows}
+              beamQuality={graphicsSettings.beamQuality}
+              enableFloorProjection={graphicsSettings.floorProjection}
               isSelected={selectedLightId === fixture.id}
               onSelect={() => selectLight(fixture.id)}
             />
@@ -600,8 +821,14 @@ export const Stage3DView: React.FC<Stage3DViewProps> = ({ stageState }) => {
                 </mesh>
               )}
 
-              <mesh position={[0, 0.65, 0]} castShadow={!isInWing} receiveShadow>
-                <cylinderGeometry args={[0.23, 0.28, 1.25, 24]} />
+              <mesh
+                position={[0, 0.65, 0]}
+                castShadow={graphicsSettings.shadows && !isInWing}
+                receiveShadow={graphicsSettings.shadows}
+              >
+                <cylinderGeometry
+                  args={[0.23, 0.28, 1.25, graphicsSettings.spotLights ? 24 : 14]}
+                />
                 <meshStandardMaterial
                   color={isInWing ? '#1e293b' : dColor}
                   roughness={0.35}
@@ -611,8 +838,18 @@ export const Stage3DView: React.FC<Stage3DViewProps> = ({ stageState }) => {
                 />
               </mesh>
 
-              <mesh position={[0, 1.52, 0]} castShadow={!isInWing} receiveShadow>
-                <sphereGeometry args={[0.23, 24, 24]} />
+              <mesh
+                position={[0, 1.52, 0]}
+                castShadow={graphicsSettings.shadows && !isInWing}
+                receiveShadow={graphicsSettings.shadows}
+              >
+                <sphereGeometry
+                  args={[
+                    0.23,
+                    graphicsSettings.spotLights ? 24 : 14,
+                    graphicsSettings.spotLights ? 24 : 14,
+                  ]}
+                />
                 <meshStandardMaterial
                   color={isInWing ? '#1e293b' : dColor}
                   roughness={0.3}

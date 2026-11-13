@@ -15,6 +15,8 @@ import {
   LightingCue,
   StageViewportMode,
   ProjectData,
+  GraphicsPreset,
+  GraphicsSettings,
 } from '../types';
 import {
   loadProjectAudio,
@@ -25,6 +27,59 @@ import {
 } from '../utils/audioStorage';
 
 export const GRID_UNIT_M = 0.9; // 1 grid = 90cm (0.9m)
+
+const GRAPHICS_STORAGE_KEY = 'formation_studio_graphics_v1';
+
+export const GRAPHICS_PRESETS: Record<Exclude<GraphicsPreset, 'custom'>, GraphicsSettings> = {
+  high: {
+    preset: 'high',
+    dpr: 1.5,
+    antialias: true,
+    spotLights: true,
+    shadows: true,
+    beamQuality: 'high',
+    floorProjection: true,
+  },
+  medium: {
+    preset: 'medium',
+    dpr: 1.0,
+    antialias: true,
+    spotLights: true,
+    shadows: false,
+    beamQuality: 'simple',
+    floorProjection: true,
+  },
+  low: {
+    preset: 'low',
+    dpr: 0.75,
+    antialias: false,
+    spotLights: false,
+    shadows: false,
+    beamQuality: 'simple',
+    floorProjection: true,
+  },
+};
+
+function loadGraphicsSettings(): GraphicsSettings {
+  try {
+    const raw = localStorage.getItem(GRAPHICS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return { ...GRAPHICS_PRESETS.medium, ...parsed };
+    }
+  } catch {
+    // Ignore storage errors
+  }
+  return { ...GRAPHICS_PRESETS.medium };
+}
+
+function saveGraphicsSettings(settings: GraphicsSettings): void {
+  try {
+    localStorage.setItem(GRAPHICS_STORAGE_KEY, JSON.stringify(settings));
+  } catch {
+    // Ignore storage errors
+  }
+}
 export const DEFAULT_DANCER_COLOR = '#38bdf8';
 
 export const DANCER_COLORS = [
@@ -828,6 +883,7 @@ export interface FormationStore {
   showLightBeams: boolean;
   showDancerNames: boolean;
   dancerScale: number;
+  graphicsSettings: GraphicsSettings;
 
   performers: Performer[];
   selectedPerformerId: string | null;
@@ -886,6 +942,8 @@ export interface FormationStore {
   setDancerScale: (scale: number) => void;
   setTimelineZoom: (zoom: number) => void;
   setIsRecordingVideo: (rec: boolean) => void;
+  setGraphicsPreset: (preset: Exclude<GraphicsPreset, 'custom'>) => void;
+  updateGraphicsSettings: (patch: Partial<Omit<GraphicsSettings, 'preset'>>) => void;
 
   // Project Settings Actions
   setStageGridDimensions: (cols: number, rows: number, wingCols?: number) => void;
@@ -1146,6 +1204,7 @@ export const useFormationStore = create<FormationStore>((set, get) => ({
   showLightBeams: true,
   showDancerNames: true,
   dancerScale: 0.72,
+  graphicsSettings: loadGraphicsSettings(),
 
   performers: SAMPLE_PROJECT.performers,
   selectedPerformerId: 'p1',
@@ -1509,6 +1568,21 @@ export const useFormationStore = create<FormationStore>((set, get) => ({
   setTimelineZoom: (timelineZoom) =>
     set({ timelineZoom: Math.max(1, Math.min(40, Math.round(timelineZoom * 10) / 10)) }),
   setIsRecordingVideo: (isRecordingVideo) => set({ isRecordingVideo }),
+  setGraphicsPreset: (preset) => {
+    const next = { ...GRAPHICS_PRESETS[preset] };
+    saveGraphicsSettings(next);
+    set({ graphicsSettings: next });
+  },
+  updateGraphicsSettings: (patch) => {
+    const current = get().graphicsSettings;
+    const next: GraphicsSettings = {
+      ...current,
+      ...patch,
+      preset: 'custom',
+    };
+    saveGraphicsSettings(next);
+    set({ graphicsSettings: next });
+  },
 
   // Automatically reposition all lights when stage dimensions change!
   setStageGridDimensions: (cols, rows, wingCols) => {
