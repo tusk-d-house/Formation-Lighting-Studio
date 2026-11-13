@@ -33,8 +33,44 @@ jobs:
       - name: Build web bundle
         run: npm run build
 
-      - name: Package macOS app (.dmg & .zip)
-        run: npx --yes electron-builder@25.1.8 --mac
+      - name: Create macOS .icns icon
+        run: |
+          mkdir -p icon.iconset
+          sips -z 16 16     electron/icon.png --out icon.iconset/icon_16x16.png
+          sips -z 32 32     electron/icon.png --out icon.iconset/icon_16x16@2x.png
+          sips -z 32 32     electron/icon.png --out icon.iconset/icon_32x32.png
+          sips -z 64 64     electron/icon.png --out icon.iconset/icon_32x32@2x.png
+          sips -z 128 128   electron/icon.png --out icon.iconset/icon_128x128.png
+          sips -z 256 256   electron/icon.png --out icon.iconset/icon_128x128@2x.png
+          sips -z 256 256   electron/icon.png --out icon.iconset/icon_256x256.png
+          sips -z 512 512   electron/icon.png --out icon.iconset/icon_256x256@2x.png
+          sips -z 512 512   electron/icon.png --out icon.iconset/icon_512x512.png
+          cp electron/icon.png icon.iconset/icon_512x512@2x.png
+          iconutil -c icns icon.iconset -o icon.icns
+
+      - name: Package macOS .app (Universal)
+        run: |
+          mkdir -p app_stage
+          cp -R dist app_stage/dist
+          cp -R electron app_stage/electron
+          printf '{"name":"formation-studio","version":"1.0.0","main":"electron/main.cjs"}\n' > app_stage/package.json
+          npx --yes @electron/packager@18.3.6 app_stage "Formation & Lighting Studio" \
+            --platform=darwin \
+            --arch=universal \
+            --electron-version=33.1.0 \
+            --icon=icon.icns \
+            --app-bundle-id=com.tuskdhouse.formationstudio \
+            --out=release-mac \
+            --overwrite
+
+      - name: Create .zip and .dmg installers
+        run: |
+          APP_PATH="release-mac/Formation & Lighting Studio-darwin-universal/Formation & Lighting Studio.app"
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "release-mac/FormationStudio-Mac.zip"
+          mkdir -p dmg_stage
+          cp -R "$APP_PATH" dmg_stage/
+          ln -s /Applications dmg_stage/Applications
+          hdiutil create -volname "Formation & Lighting Studio" -srcfolder dmg_stage -ov -format UDZO "release-mac/FormationStudio-Mac.dmg"
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
