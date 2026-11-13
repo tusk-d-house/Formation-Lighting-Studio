@@ -1,0 +1,64 @@
+name: Build macOS App
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-mac:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: runtime/resources/app
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: runtime/resources/app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web bundle
+        run: npm run build
+
+      - name: Package macOS app (.dmg & .zip)
+        run: npx --yes electron-builder@25.1.8 --mac
+
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: FormationStudio-Mac
+          path: |
+            runtime/resources/app/release-mac/FormationStudio-Mac.dmg
+            runtime/resources/app/release-mac/FormationStudio-Mac.zip
+
+      - name: Publish to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.0
+          name: Formation & Lighting Studio v1.0.0
+          body: |
+            Formation & Lighting Studio のリリースページです。
+
+            ### Mac 版のダウンロード・起動方法
+            1. 下の Assets から **`FormationStudio-Mac.dmg`** をダウンロードして開きます（Apple Silicon / Intel Mac 両対応）。
+            2. **`Formation & Lighting Studio`** を **Applications（アプリケーション）** フォルダへドラッグ＆ドロップします。
+            3. 初回起動時に「開発元を確認できないため開けません」と表示された場合は、アプリアイコンを **Control + クリック（右クリック）＞「開く」**（または「システム設定」＞「プライバシーとセキュリティ」＞「このまま開く」）から起動してください。
+
+            ### Windows 版のダウンロード・起動方法
+            - リポジトリトップの緑色の **`<> Code` ＞ `Download ZIP`** からダウンロード・解凍し、**`FormationStudio.exe`** を開いてください。
+          files: |
+            runtime/resources/app/release-mac/FormationStudio-Mac.dmg
+            runtime/resources/app/release-mac/FormationStudio-Mac.zip

@@ -32,5 +32,42 @@
     "typescript": "^5.6.3",
     "vite": "^5.4.10",
     "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.tuskdhouse.formationstudio",
+    "productName": "Formation & Lighting Studio",
+    "directories": {
+      "output": "release-mac"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "icon": "electron/icon.png",
+      "category": "public.app-category.utilities",
+      "identity": null,
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "universal"
+          ]
+        }
+      ]
+    },
+    "dmg": {
+      "artifactName": "FormationStudio-Mac.${ext}"
+    },
+    "zip": {
+      "artifactName": "FormationStudio-Mac.${ext}"
+    }
   }
 }

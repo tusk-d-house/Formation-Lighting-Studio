@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
@@ -317,7 +317,54 @@ async function createWindow() {
   }
 }
 
+function setupMacMenu() {
+  if (process.platform !== 'darwin') return;
+  const template = [
+    {
+      label: app.name,
+      submenu: [
+        { role: 'about', label: 'Formation & Lighting Studio について' },
+        { type: 'separator' },
+        { role: 'hide', label: '隠す' },
+        { role: 'hideOthers', label: 'ほかを隠す' },
+        { role: 'unhide', label: 'すべてを表示' },
+        { type: 'separator' },
+        { role: 'quit', label: '終了' },
+      ],
+    },
+    {
+      label: '編集',
+      submenu: [
+        { role: 'undo', label: '元に戻す' },
+        { role: 'redo', label: 'やり直す' },
+        { type: 'separator' },
+        { role: 'cut', label: '切り取り' },
+        { role: 'copy', label: 'コピー' },
+        { role: 'paste', label: '貼り付け' },
+        { role: 'selectAll', label: 'すべて選択' },
+      ],
+    },
+    {
+      label: 'ウィンドウ',
+      submenu: [
+        { role: 'minimize', label: 'しまう' },
+        { role: 'zoom', label: '拡大/縮小' },
+        { type: 'separator' },
+        { role: 'front', label: 'すべてを手前に移動' },
+      ],
+    },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 app.whenReady().then(() => {
+  setupMacMenu();
+  if (process.platform === 'darwin' && app.dock) {
+    const iconPath = path.join(__dirname, 'icon.png');
+    if (fs.existsSync(iconPath)) {
+      app.dock.setIcon(iconPath);
+    }
+  }
   createWindow();
 
   app.on('activate', () => {
